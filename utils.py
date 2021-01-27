@@ -1,5 +1,4 @@
 import torch
-#TODO:this is straight up copied
 
 #notes
 #https://www.youtube.com/watch?v=LHXXI4-IEns
@@ -7,6 +6,7 @@ import torch
 #https://www.youtube.com/watch?v=YereI6Gn3bM&t=486s
 #https://github.com/LearnedVector/A-Hackers-AI-Voice-Assistant/tree/master/VoiceAssistant/speechrecognition/neuralnet
 
+#TODO:this is straight up copied
 class TextProcess:
 	def __init__(self):
 		char_map_str = """
@@ -66,4 +66,3 @@ class TextProcess:
 		return ''.join(string).replace('<SPACE>', ' ')
 
 
-textprocess = TextProcess()

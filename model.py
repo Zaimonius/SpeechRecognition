@@ -10,14 +10,25 @@ from torchvision import datasets
 
 
 class SpeechRecognition(nn.Module):
-    def __init__(self,input):
+    def __init__(self, input_size=81, dropout=0.1, num_classes=29, hidden_size=1024, num_layers=1):
         super().__init__()
         #define layers
         #in out ?
 
         #first cnn layer
-        conv = nn.Conv1d(in_channel, out_channel, groups=1, bias=True, kernel_size=2, padding=0, stride=1)
+        #CNNs are used to look for features of data - in my case letters
         self.cnn = nn.Sequential(
-            nn.Conv1d()
+            nn.Conv1d(input_size, input_size, 10, 2, padding=10//2),
+        )
+        #dense layers
+        self.dense = nn.Sequential(
+            nn.Linear(input_size, 128),
+            nn.LayerNorm(128),
+            nn.GELU(),
+            nn.Dropout(0.1),
+            nn.Linear(128, 128),
+            nn.LayerNorm(128),
+            nn.GELU(),
+            nn.Dropout(0.1),
         )
         
