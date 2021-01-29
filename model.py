@@ -15,7 +15,7 @@ from torchvision import datasets
 # num_layers - number of lstm layers
 
 class SpeechRecognition(nn.Module):
-    def __init__(self, n_features=81, dropout=0.1, num_classes=29, hidden_size=1024, num_layers=1):
+    def __init__(self, n_features=64, dropout=0.1, num_classes=29, hidden_size=1024, num_layers=1, num_channels=1):
         super().__init__()
         self.num_layers = num_layers
         self.hidden_size = hidden_size
@@ -23,7 +23,9 @@ class SpeechRecognition(nn.Module):
         #------------------------------------------------
         #first cnn layer
         #CNNs are used to look for features of data - in my case letters
-        self.cnn = nn.Conv1d(n_features, n_features, 10, 2, padding=10//2),
+        self.cnn = nn.Sequential(
+            nn.Conv1d(n_features, num_channels, 10, 2, padding=10//2),
+        )
         #dense layers
         self.dense = nn.Sequential(
             nn.Linear(n_features, 128),
@@ -47,9 +49,10 @@ class SpeechRecognition(nn.Module):
         return (torch.zeros(n*1, batch_size, hs),
                 torch.zeros(n*1, batch_size, hs))
     
-    def forward(self, x):
-           def forward(self, x, hidden):
-        x = x.squeeze(1)  # batch, feature, time
+    def forward(self, x, hidden):
+        #
+        # x = x.squeeze(1)  # batch, feature, time
+        #TODO: fix data order in collate/pad function
         x = self.cnn(x) # batch, time, feature
         x = self.dense(x) # batch, time, feature
         x = x.transpose(0, 1) # time, batch, feature
