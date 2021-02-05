@@ -33,12 +33,14 @@ import train
 # output = torch.randn(20)
 # output = m(output)
 # print(output)
-
+mode = 2
 #------------------------------------------------
 #Train
-trainer = train.Trainer(file_path="model_dict.txt", epochs=10)
+if mode == 1:
+    trainer = train.Trainer(file_path="model_dict.txt", epochs=10)
 
 #------------------------------------------------
 #Test
-# trainer = train.Trainer(file_path="model_dict.txt", epochs=0)
-# trainer.test()
+if mode == 2:
+    trainer = train.Trainer(file_path="model_dict.txt", epochs=0)
+    trainer.test()
