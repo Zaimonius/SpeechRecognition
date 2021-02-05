@@ -44,17 +44,13 @@ class SpeechRecognition(nn.Module):
         #TODO: fix data order in collate/pad function
         #CNNs
         x = self.cnn1(x) # batch, feature, sequence length
-        #print(x.shape)
-        x = F.relu(self.bn1(x))
-        #print(x.shape)
-        x = self.pool1(x)
-        #print(x.shape)
+        x = F.relu(x)
+        x = self.bn1(x)
+        #x = self.pool1(x)
         x = self.cnn2(x)
-        #print(x.shape)
-        x = F.relu(self.bn2(x))
-        #print(x.shape)
-        x = self.pool2(x)
-        #print(x.shape)
+        x = F.relu(x)
+        x = self.bn2(x)
+        #x = self.pool2(x)
         #BRNNs
         x = x.contiguous().transpose(1,2) #TODO: fix continguous copy stuff
         #print(x.shape)
@@ -62,7 +58,7 @@ class SpeechRecognition(nn.Module):
         #print(out.shape)
         out = self.final_fc(out)
         #print(out.shape)
-        return F.log_softmax(out)
+        return out#F.log_softmax(out, dim=2)
         # out, (hn, cn) = self.lstm(x, hidden)
         # x = self.dropout2(F.gelu(self.layer_norm2(out)))  # (time, batch, n_class)
         # return self.final_fc(x), (hn, cn)

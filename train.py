@@ -35,8 +35,7 @@ class Trainer:
     def collate_fn(self, batch):
         data_list, target_list = [], []
         for _data, _, _target in batch:
-            #data = _data.t().tolist()
-            data_list.append(torch.Tensor(_data.t().tolist())) #input
+            data_list.append(_data.t()) #input
             text = textprocess.text_to_int_sequence(_target['sentence'].lower())
             text = text + list(repeat(0, 128 - len(text)))
             text = text[:128]
