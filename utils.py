@@ -6,6 +6,8 @@ import torch
 #https://www.youtube.com/watch?v=YereI6Gn3bM&t=486s
 #https://github.com/LearnedVector/A-Hackers-AI-Voice-Assistant/tree/master/VoiceAssistant/speechrecognition/neuralnet
 
+
+
 #TODO:this is straight up copied
 class TextProcess:
 	def __init__(self):

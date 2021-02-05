@@ -7,6 +7,12 @@ from torchvision import datasets
 import utils
 import train
 
+#REQUIREMENTS:
+#PyTorch
+#Pip
+#Python
+#tqdm
+
 #------------------------------------------------
 
 # print(torch.cuda.is_available())
@@ -29,7 +35,10 @@ import train
 # print(output)
 
 #------------------------------------------------
-
-trainer = train.Trainer(file_path="model_dict.txt", epochs=1)
+#Train
+trainer = train.Trainer(file_path="model_dict.txt", epochs=10)
 
 #------------------------------------------------
+#Test
+# trainer = train.Trainer(file_path="model_dict.txt", epochs=0)
+# trainer.test()
