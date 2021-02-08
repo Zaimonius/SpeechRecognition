@@ -33,7 +33,7 @@ import train
 # output = torch.randn(20)
 # output = m(output)
 # print(output)
-mode = 2
+mode = 1
 #------------------------------------------------
 #Train
 if mode == 1:

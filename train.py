@@ -36,6 +36,7 @@ class Trainer:
         data_list, target_list = [], []
         for _data, _, _target in batch:
             data_list.append(_data.t()) #input
+            #test = _data.tolist()
             text = textprocess.text_to_int_sequence(_target['sentence'].lower())
             text = text + list(repeat(0, 128 - len(text)))
             text = text[:128]
@@ -58,6 +59,7 @@ class Trainer:
         #setup net
         if torch.cuda.is_available():
             self.net.cuda()
+        self.criterion = nn.CTCLoss(blank=27, zero_infinity=True)
         optimizer = optim.Adam(self.net.parameters(), lr=0.001)
         #scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.1)  # reduce the learning after 20 epochs by a factor of 10
         for epoch in range(0,epochs):
@@ -71,17 +73,19 @@ class Trainer:
                 data, target = data.to(self.device), target.to(self.device) # data is the batch of features, target is the batch of targets.
                 self.net.zero_grad()                                        # sets gradients to 0 before loss calc. You will do this likely every step.
                 hidden = self.net._init_hidden(batch_size=batch_size)
-                output = self.net(data,hidden).squeeze()                           # pass in the reshaped batch
+                output = self.net(data,hidden)                    # pass in the reshaped batch
                 target = target.long()
-                if i > trainset_len-2:
-                    break
-                loss = F.nll_loss(output, target)
+                input_lengths = torch.full(size=(batch_size,), fill_value=128, dtype=torch.long)
+                target_lengths = torch.full(size=(batch_size,), fill_value=128, dtype=torch.long)
+                loss = self.criterion(output, target, input_lengths, target_lengths)
                 loss.backward()                                             # apply this loss backwards thru the network's parameters
                 optimizer.step()                                            # attempt to optimize weights to account for loss/gradients
                 i = i + 1
                 if((i/trainset_len)*100) > j:
                     j = j + 1
                     self.save()
+                if i > trainset_len-2:
+                    break
             #save here every epoch
             self.save()
             #after train test the model
@@ -97,10 +101,10 @@ class Trainer:
             self.net.zero_grad()                                        # sets gradients to 0 before loss calc. You will do this likely every step.
             hidden = self.net._init_hidden(batch_size=batch_size)
             output = self.net(data,hidden).squeeze()                           # pass in the reshaped batch
-            target = target.long()
+            target = target.tolist()
             data = output.tolist()
             data2 = output.data[1]
-            correct += self.num_correct(output, target)
+            #correct += self.num_correct(output, target)
 
             #pred = get_likely_index(output)
 
