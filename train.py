@@ -15,34 +15,55 @@ from tqdm import tqdm
 textprocess = utils.TextProcess()
 
 class Trainer: 
-    def __init__(self, file_path, epochs, batch_size=16):
+    def __init__(self, file_path, epochs, batch_size=4):
         print("Cuda : " + str(torch.cuda.is_available()))
         self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu') #set cpu or gpu
         self.file_path = file_path
         self.net = model.SpeechRecognition()
-        self.net.train()
+        if torch.cuda.is_available():
+            self.net.cuda()
+        else:
+            self.net.cpu()
+        self.criterion = nn.CTCLoss(blank=28, zero_infinity=True, reduction='sum').to(self.device)
         if file_path is not None and path.exists(file_path):
             self.load()
             self.net.to(self.device)
             self.net.train()
+        #set training waveform data transformer
+        self.train_audio_transforms = nn.Sequential(
+        torchaudio.transforms.MelSpectrogram(sample_rate=48000, n_mels=128),
+        torchaudio.transforms.FrequencyMasking(freq_mask_param=15),
+        torchaudio.transforms.TimeMasking(time_mask_param=35)
+        )
+        #set testing waveform data transformer
+        self.valid_audio_transforms = torchaudio.transforms.MelSpectrogram()
+        #train
         self.train(epochs=epochs, batch_size=batch_size)
+
 
     #------------------------------------------------
     # data order
     # waveform, sample_rate, dic[sentence, person id, etc.]
     #------------------------------------------------
     #collate functions helps the dataloader set labels and data
-    def collate_fn(self, batch):
-        data_list, target_list = [], []
-        for _data, _, _target in batch:
-            data_list.append(_data.t()) #input
-            #test = _data.tolist()
-            text = textprocess.text_to_int_sequence(_target['sentence'].lower())
-            text = text + list(repeat(0, 128 - len(text)))
-            text = text[:128]
-            target_list.append(torch.Tensor(text)) #target output
-        #format data in the end
-        return torch.nn.utils.rnn.pad_sequence(data_list, batch_first=True, padding_value=0.).transpose(1,2), torch.nn.utils.rnn.pad_sequence(target_list, batch_first=True, padding_value=0.)
+    def collate_fn(self, data, data_type="train"):
+        spectrograms = []
+        labels = []
+        input_lengths = []
+        label_lengths = []
+        for (waveform, _, utterance) in data:
+            if data_type == 'train':
+                spec = self.train_audio_transforms(waveform).squeeze(0).transpose(0, 1) #for training
+            else:
+                spec = self.valid_audio_transforms(waveform).squeeze(0).transpose(0, 1) #for testing
+            spectrograms.append(spec)
+            label = torch.Tensor(textprocess.text_to_int_sequence(utterance["sentence"].lower()))
+            labels.append(label)
+            input_lengths.append(spec.shape[0]//2)
+            label_lengths.append(len(label))
+        spectrograms = nn.utils.rnn.pad_sequence(spectrograms, batch_first=True).unsqueeze(1).transpose(2, 3)
+        labels = nn.utils.rnn.pad_sequence(labels, batch_first=True)
+        return spectrograms, labels, input_lengths, label_lengths
     
     def load(self):
         #loading neural net
@@ -55,13 +76,8 @@ class Trainer:
         if self.file_path is not None:
             torch.save(self.net.state_dict(), self.file_path) #save input size and dictionary
 
-    def train(self, epochs, batch_size=16):
+    def train(self, epochs, batch_size=4):
         #setup net
-        if torch.cuda.is_available():
-            self.net.cuda()
-        self.criterion = nn.CTCLoss(blank=27, zero_infinity=True)
-        optimizer = optim.Adam(self.net.parameters(), lr=0.001)
-        #scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.1)  # reduce the learning after 20 epochs by a factor of 10
         for epoch in range(0,epochs):
             #setup dataset
             train = torchaudio.datasets.COMMONVOICE(root='/media/gussim/SlaveDisk/MCV',version= 'cv-corpus-6.1-2020-12-11', download = False)
@@ -69,45 +85,60 @@ class Trainer:
             trainset_len = len(trainset)
             i = 0
             j = 1
-            for data, target in tqdm(trainset, desc="Epoch #"+str(epoch)):
-                data, target = data.to(self.device), target.to(self.device) # data is the batch of features, target is the batch of targets.
-                self.net.zero_grad()                                        # sets gradients to 0 before loss calc. You will do this likely every step.
-                hidden = self.net._init_hidden(batch_size=batch_size)
-                output = self.net(data,hidden)                    # pass in the reshaped batch
-                target = target.long()
-                input_lengths = torch.full(size=(batch_size,), fill_value=128, dtype=torch.long)
-                target_lengths = torch.full(size=(batch_size,), fill_value=128, dtype=torch.long)
-                loss = self.criterion(output, target, input_lengths, target_lengths)
+            optimizer = optim.AdamW(self.net.parameters(), lr=0.001)
+            scheduler = optim.lr_scheduler.OneCycleLR(optimizer, max_lr=0.001, steps_per_epoch=int(trainset_len), epochs=epochs, anneal_strategy='linear')
+            for data in tqdm(trainset, desc="Epoch #"+str(epoch)):
+                spectrogramdata, labels, input_lengths, label_lengths = data 
+                spectrogramdata, labels = spectrogramdata.to(self.device), labels.to(self.device)
+                optimizer.zero_grad()
+                output = self.net(spectrogramdata).contiguous()  # batch, time, num_class
+                output = F.log_softmax(output,dim=2)
+                output = output.transpose(0, 1) # time, batch, num_class
+                outp = output.tolist()
+                loss = self.criterion(output, labels, input_lengths, label_lengths)
                 loss.backward()                                             # apply this loss backwards thru the network's parameters
                 optimizer.step()                                            # attempt to optimize weights to account for loss/gradients
+                scheduler.step()
                 i = i + 1
-                if((i/trainset_len)*100) > j:
+                if((i/trainset_len)*1000) > j:
+                    self.test(batch_size=batch_size)
                     j = j + 1
                     self.save()
                 if i > trainset_len-2:
                     break
+            #after train test the model
             #save here every epoch
             self.save()
-            #after train test the model
-            self.test(batch_size=batch_size)
 
-    def test(self,batch_size=16):
+    def test(self,batch_size=4):
         self.net.eval()
-        correct = 0
         test = torchaudio.datasets.COMMONVOICE(root='/media/gussim/SlaveDisk/MCV',version= 'cv-corpus-6.1-2020-12-11', download = False)
         testset = torch.utils.data.DataLoader(test, batch_size=batch_size, shuffle=True, collate_fn=self.collate_fn)
-        for data, target in testset:
-            data, target = data.to(self.device), target.to(self.device) # data is the batch of features, target is the batch of targets.
-            self.net.zero_grad()                                        # sets gradients to 0 before loss calc. You will do this likely every step.
-            hidden = self.net._init_hidden(batch_size=batch_size)
-            output = self.net(data,hidden).squeeze()                           # pass in the reshaped batch
-            target = target.tolist()
-            data = output.tolist()
-            data2 = output.data[1]
-            #correct += self.num_correct(output, target)
+        test_loss = 0
+        test_cer, test_wer = [], []
+        with torch.no_grad():
+            i = 0
+            for data in testset:
+                spectrograms, labels, input_lengths, label_lengths = data 
+                spectrograms, labels = spectrograms.to(self.device), labels.to(self.device)
 
-            #pred = get_likely_index(output)
+                output = self.net(spectrograms)  # batch, time, num_class
+                output = F.log_softmax(output, dim=2)
+                output = output.transpose(0, 1) # time, batch, num_class
+                outptlst = output.tolist()
 
-    def num_correct(self, pred, target):
-        pred.eval()
-        
+                loss = self.criterion(output, labels, input_lengths, label_lengths)
+                test_loss += loss.item() / len(testset)
+
+                decoded_preds, decoded_targets = textprocess.greedy_decoder(output.transpose(0, 1), labels, label_lengths)
+                for j in range(len(decoded_preds)):
+                    test_cer.append(utils.cer(decoded_targets[j], decoded_preds[j]))
+                    test_wer.append(utils.wer(decoded_targets[j], decoded_preds[j]))
+                avg_cer = sum(test_cer)/len(test_cer)
+                avg_wer = sum(test_wer)/len(test_wer)
+                print(avg_cer)
+                print(avg_wer)
+                i = i + 1
+                if i == 10:
+                    break
+        print('Test set: Average loss: {:.4f}, Average CER: {:4f} Average WER: {:.4f}\n'.format(test_loss, avg_cer, avg_wer))
