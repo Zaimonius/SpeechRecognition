@@ -2,6 +2,8 @@ import torch
 import numpy as np
 #All code is taken from: https://www.assemblyai.com/blog/end-to-end-speech-recognition-pytorch 
 
+
+
 class TextProcess:
 	"""text to int and int to text converter"""
 	def __init__(self):

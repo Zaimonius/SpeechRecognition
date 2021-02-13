@@ -40,7 +40,6 @@ class Trainer:
         #train
         self.train(epochs=epochs, batch_size=batch_size)
 
-
     #------------------------------------------------
     # data order
     # waveform, sample_rate, dic[sentence, person id, etc.]
@@ -78,6 +77,9 @@ class Trainer:
 
     def train(self, epochs, batch_size=4):
         #setup net
+            self.net.cuda()
+        self.criterion = nn.CTCLoss(blank=27, zero_infinity=True)
+        #scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.1)  # reduce the learning after 20 epochs by a factor of 10
         for epoch in range(0,epochs):
             #setup dataset
             train = torchaudio.datasets.COMMONVOICE(root='/media/gussim/SlaveDisk/MCV',version= 'cv-corpus-6.1-2020-12-11', download = False)
@@ -121,6 +123,9 @@ class Trainer:
             for data in testset:
                 spectrograms, labels, input_lengths, label_lengths = data 
                 spectrograms, labels = spectrograms.to(self.device), labels.to(self.device)
+            data = output.tolist()
+            data2 = output.data[1]
+            #correct += self.num_correct(output, target)
 
                 output = self.net(spectrograms)  # batch, time, num_class
                 output = F.log_softmax(output, dim=2)
@@ -129,7 +134,7 @@ class Trainer:
 
                 loss = self.criterion(output, labels, input_lengths, label_lengths)
                 test_loss += loss.item() / len(testset)
-
+        
                 decoded_preds, decoded_targets = textprocess.greedy_decoder(output.transpose(0, 1), labels, label_lengths)
                 for j in range(len(decoded_preds)):
                     test_cer.append(utils.cer(decoded_targets[j], decoded_preds[j]))

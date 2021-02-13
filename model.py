@@ -87,10 +87,10 @@ class SpeechRecognition(nn.Module):
         ])
         self.classifier = nn.Sequential(
             nn.Linear(rnn_dim*2, rnn_dim),  # birnn returns rnn_dim*2
-            nn.GELU(),
-            nn.Dropout(dropout),
+
+        self.cnn4 = nn.Conv1d(2 * num_output, 2 * num_output, kernel_size=3)
             nn.Linear(rnn_dim, num_class)
-        )
+        self.pool4 = nn.MaxPool1d(4)
 
     def forward(self, x):
         x = self.cnn(x)
@@ -102,3 +102,24 @@ class SpeechRecognition(nn.Module):
         x = self.birnn_layers(x)
         x = self.classifier(x)
         return x
+        x = self.pool2(x)
+        x = self.cnn3(x)
+        x = F.relu(self.bn3(x))
+        x = self.pool3(x)
+        x = self.cnn4(x)
+        x = F.relu(self.bn4(x))
+        x = self.pool4(x)
+        #BRNNs
+        x = F.avg_pool1d(x, x.shape[-1])
+        x = x.contiguous().transpose(1,2) #TODO: fix continguous copy stuff
+        x = self.fc1(x)
+        #print(x.shape)
+        #out, _states = self.lstm(x) #batch size, sequence length, features
+        #print(x.shape)
+        #print(out.shape)
+        #out = self.final_fc(out)
+        #print(out.shape)
+        return F.log_softmax(x, dim=2)#F.log_softmax(out, dim=2)
+        # out, (hn, cn) = self.lstm(x, hidden)
+        # x = self.dropout2(F.gelu(self.layer_norm2(out)))  # (time, batch, n_class)
+        # return self.final_fc(x), (hn, cn)

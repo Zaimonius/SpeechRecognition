@@ -33,9 +33,9 @@ import train
 # output = torch.randn(20)
 # output = m(output)
 # print(output)
-
 mode = 1
-
+#Train
+    trainer = train.Trainer(file_path="model_dict.txt", epochs=10)
 
 #------------------------------------------------
 #Train
