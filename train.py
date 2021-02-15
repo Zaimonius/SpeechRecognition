@@ -14,26 +14,25 @@ from tqdm import tqdm
 
 textprocess = utils.TextProcess()
 
-class Trainer: 
+class Trainer:
     def __init__(self, file_path, epochs, batch_size=4):
         print("Cuda : " + str(torch.cuda.is_available()))
         self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu') #set cpu or gpu
         self.file_path = file_path
         self.net = model.SpeechRecognition()
+        self.criterion = nn.CTCLoss(blank=28).to(self.device)
         if torch.cuda.is_available():
             self.net.cuda()
         else:
             self.net.cpu()
-        self.criterion = nn.CTCLoss(blank=28, zero_infinity=True, reduction='sum').to(self.device)
         if file_path is not None and path.exists(file_path):
             self.load()
             self.net.to(self.device)
-            self.net.train()
         #set training waveform data transformer
         self.train_audio_transforms = nn.Sequential(
-        torchaudio.transforms.MelSpectrogram(sample_rate=48000, n_mels=128),
-        torchaudio.transforms.FrequencyMasking(freq_mask_param=15),
-        torchaudio.transforms.TimeMasking(time_mask_param=35)
+        torchaudio.transforms.MelSpectrogram(sample_rate=16000, n_mels=128),
+        torchaudio.transforms.FrequencyMasking(freq_mask_param=30),
+        torchaudio.transforms.TimeMasking(time_mask_param=100)
         )
         #set testing waveform data transformer
         self.valid_audio_transforms = torchaudio.transforms.MelSpectrogram()
@@ -50,13 +49,13 @@ class Trainer:
         labels = []
         input_lengths = []
         label_lengths = []
-        for (waveform, _, utterance) in data:
+        for (waveform, _, utterance, _, _, _) in data:
             if data_type == 'train':
                 spec = self.train_audio_transforms(waveform).squeeze(0).transpose(0, 1) #for training
             else:
                 spec = self.valid_audio_transforms(waveform).squeeze(0).transpose(0, 1) #for testing
             spectrograms.append(spec)
-            label = torch.Tensor(textprocess.text_to_int_sequence(utterance["sentence"].lower()))
+            label = torch.Tensor(textprocess.text_to_int_sequence(utterance.lower()))
             labels.append(label)
             input_lengths.append(spec.shape[0]//2)
             label_lengths.append(len(label))
@@ -76,34 +75,42 @@ class Trainer:
             torch.save(self.net.state_dict(), self.file_path) #save input size and dictionary
 
     def train(self, epochs, batch_size=4):
-        #setup net
-            self.net.cuda()
-        self.criterion = nn.CTCLoss(blank=27, zero_infinity=True)
-        #scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.1)  # reduce the learning after 20 epochs by a factor of 10
+        #setup net and loss
+        self.net.train()
         for epoch in range(0,epochs):
             #setup dataset
-            train = torchaudio.datasets.COMMONVOICE(root='/media/gussim/SlaveDisk/MCV',version= 'cv-corpus-6.1-2020-12-11', download = False)
+            #train = torchaudio.datasets.COMMONVOICE(root='/media/gussim/SlaveDisk/MCV',version= 'cv-corpus-6.1-2020-12-11', download = False)
+            train = torchaudio.datasets.LIBRISPEECH("./", url="train-clean-100", download=False)
             trainset = torch.utils.data.DataLoader(train, batch_size=batch_size, shuffle=True, collate_fn=self.collate_fn)
             trainset_len = len(trainset)
             i = 0
             j = 1
-            optimizer = optim.AdamW(self.net.parameters(), lr=0.001)
-            scheduler = optim.lr_scheduler.OneCycleLR(optimizer, max_lr=0.001, steps_per_epoch=int(trainset_len), epochs=epochs, anneal_strategy='linear')
+            optimizer = optim.AdamW(self.net.parameters(), lr=5e-4)
+            scheduler = optim.lr_scheduler.OneCycleLR(optimizer, max_lr=5e-4, steps_per_epoch=int(trainset_len), epochs=epochs, anneal_strategy='linear')
             for data in tqdm(trainset, desc="Epoch #"+str(epoch)):
+
                 spectrogramdata, labels, input_lengths, label_lengths = data 
                 spectrogramdata, labels = spectrogramdata.to(self.device), labels.to(self.device)
+
                 optimizer.zero_grad()
+
                 output = self.net(spectrogramdata).contiguous()  # batch, time, num_class
-                output = F.log_softmax(output,dim=2)
-                output = output.transpose(0, 1) # time, batch, num_class
                 outp = output.tolist()
+                output = F.log_softmax(output,dim=2)
+                outp2 = output.tolist()
+                output = output.transpose(0, 1) # time, batch, num_class
+
                 loss = self.criterion(output, labels, input_lengths, label_lengths)
+                #print(loss.item())
                 loss.backward()                                             # apply this loss backwards thru the network's parameters
+
                 optimizer.step()                                            # attempt to optimize weights to account for loss/gradients
                 scheduler.step()
+                #save
                 i = i + 1
-                if((i/trainset_len)*1000) > j:
-                    self.test(batch_size=batch_size)
+                if((i/trainset_len)*100) > j:
+                    #self.test(batch_size=batch_size)
+                    self.net.train()
                     j = j + 1
                     self.save()
                 if i > trainset_len-2:
@@ -114,7 +121,8 @@ class Trainer:
 
     def test(self,batch_size=4):
         self.net.eval()
-        test = torchaudio.datasets.COMMONVOICE(root='/media/gussim/SlaveDisk/MCV',version= 'cv-corpus-6.1-2020-12-11', download = False)
+        #test = torchaudio.datasets.COMMONVOICE(root='/media/gussim/SlaveDisk/MCV',version= 'cv-corpus-6.1-2020-12-11', download = False)
+        test = torchaudio.datasets.LIBRISPEECH("./", url="test-clean", download=False)
         testset = torch.utils.data.DataLoader(test, batch_size=batch_size, shuffle=True, collate_fn=self.collate_fn)
         test_loss = 0
         test_cer, test_wer = [], []
@@ -123,18 +131,12 @@ class Trainer:
             for data in testset:
                 spectrograms, labels, input_lengths, label_lengths = data 
                 spectrograms, labels = spectrograms.to(self.device), labels.to(self.device)
-            data = output.tolist()
-            data2 = output.data[1]
-            #correct += self.num_correct(output, target)
-
                 output = self.net(spectrograms)  # batch, time, num_class
                 output = F.log_softmax(output, dim=2)
                 output = output.transpose(0, 1) # time, batch, num_class
                 outptlst = output.tolist()
-
                 loss = self.criterion(output, labels, input_lengths, label_lengths)
                 test_loss += loss.item() / len(testset)
-        
                 decoded_preds, decoded_targets = textprocess.greedy_decoder(output.transpose(0, 1), labels, label_lengths)
                 for j in range(len(decoded_preds)):
                     test_cer.append(utils.cer(decoded_targets[j], decoded_preds[j]))

@@ -13,30 +13,7 @@ import train
 #Python
 #tqdm
 
-#------------------------------------------------
-
-# print(torch.cuda.is_available())
-
-#------------------------------------------------
-
-# texp = utils.TextProcess()
-
-# i = texp.text_to_int_sequence("hej jeg ar simme")
-
-# w = texp.int_to_text_sequence(i)
-
-# print("word: " + w + " int: " + str(i))
-
-#------------------------------------------------
-
-# m = nn.Dropout(p=0.2)
-# output = torch.randn(20)
-# output = m(output)
-# print(output)
-mode = 1
-#Train
-    trainer = train.Trainer(file_path="model_dict.txt", epochs=10)
-
+mode = 2
 #------------------------------------------------
 #Train
 if mode == 1:
