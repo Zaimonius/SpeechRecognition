@@ -66,7 +66,7 @@ class TextProcess:
 		return ''.join(string).replace('<SPACE>', ' ')
 
 
-	def greedy_decoder(self, output, labels, label_lengths, blank_label=28, collapse_repeated=True):
+	def greedy_decoder_label(self, output, labels, label_lengths, blank_label=28, collapse_repeated=True):
 		""" Decoding method to process our model's output into characters that can be combined to create the transcript """
 		arg_maxes = torch.argmax(output, dim=2)
 		arglist = arg_maxes.tolist()
@@ -82,6 +82,21 @@ class TextProcess:
 					decode.append(index.item())
 			decodes.append(self.int_to_text_sequence(decode))
 		return decodes, targets
+
+	def greedy_decoder(self, output, blank_label=28, collapse_repeated=True):
+		""" Decoding method to process our model's output into characters that can be combined to create the transcript """
+		arg_maxes = torch.argmax(output, dim=2)
+		arglist = arg_maxes.tolist()
+		decodes = []
+		for i, args in enumerate(arg_maxes):
+			decode = []
+			for j, index in enumerate(args):
+				if index != blank_label:
+					if collapse_repeated and j != 0 and index == args[j -1]:
+						continue
+					decode.append(index.item())
+			decodes.append(self.int_to_text_sequence(decode))
+		return decodes
 
 
 def _levenshtein_distance(ref, hyp):

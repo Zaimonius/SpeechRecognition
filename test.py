@@ -8,23 +8,29 @@ import utils
 import train
 
 #REQUIREMENTS:
-#PyTorch
-#Pip
 #Python
+#Pip
+#PyTorch
 #tqdm
 
-mode = 2
+mode = 1
 #------------------------------------------------
 #Train
 if mode == 1:
-    trainer = train.Trainer(file_path="newtest.txt", epochs=1)
+    trainer = train.Trainer(file_path="librispeechmodel.txt", epochs=20)
     trainer.test()
 
 #------------------------------------------------
 #Test
 if mode == 2:
-    trainer = train.Trainer(file_path="newtest.txt", epochs=0)
+    trainer = train.Trainer(file_path="librispeechmodel.txt", epochs=0)
     trainer.test()
+
+#------------------------------------------------
+#Test on own wav file
+if mode == 3:
+    trainer = train.Trainer(file_path="librispeechmodel.txt", epochs=0, batch_size=1)
+    trainer.speech_to_text('./cbt.wav') #TODO: fix file
 
 # #Target are to be padded
 # T = 50      # Input sequence 
