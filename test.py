@@ -11,9 +11,15 @@ import train
 #Python
 #Pip
 #PyTorch
+#TorchAudio
 #tqdm
+#sounddevice
+#wavio
+#scipy
 
-mode = 1
+#for all run command: pip install torch torchaudio tqdm sounddevice wavio scipy
+
+mode = 3
 #------------------------------------------------
 #Train
 if mode == 1:
